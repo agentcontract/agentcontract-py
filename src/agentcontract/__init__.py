@@ -12,7 +12,7 @@ from .loader import load_contract
 from .models import Contract
 from .runner import ContractRunner, RunContext, RunResult
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __spec_version__ = "0.1.0"
 __all__ = [
     "AuditWriter",
