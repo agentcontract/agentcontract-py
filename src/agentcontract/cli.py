@@ -25,12 +25,16 @@ def check_command(contract_file: str) -> None:
     """Validate a contract file against the AgentContract schema."""
     try:
         contract = load_contract(contract_file)
-        click.echo(click.style("✓ Contract is valid", fg="green"))
-        click.echo(f"  Agent:    {contract.agent}")
-        click.echo(f"  Version:  {contract.version}")
-        click.echo(f"  Spec:     {contract.spec_version}")
-        click.echo(f"  Clauses:  {len(contract.must)} must, {len(contract.must_not)} must_not, "
-                   f"{len(contract.assert_)} assertions")
+        n_assertions = len(contract.assert_)
+        n_limits = sum([
+            1 if contract.limits.max_latency_ms else 0,
+            1 if contract.limits.max_cost_usd else 0,
+            1 if contract.limits.max_tokens else 0,
+        ])
+        click.echo(click.style(
+            f"✓ Contract valid: {contract.agent} v{contract.version}", fg="green"
+        ))
+        click.echo(f"  {n_assertions} assertions, {n_limits} limits")
     except ContractLoadError as e:
         click.echo(click.style(f"✗ Invalid contract: {e}", fg="red"), err=True)
         sys.exit(1)

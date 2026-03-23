@@ -38,6 +38,7 @@ class RunResult:
     agent: str
     contract_version: str
     violations: list[ViolationRecord] = field(default_factory=list)
+    clauses_checked: int = 0
     context: RunContext | None = None
 
     @property
@@ -65,7 +66,7 @@ class ContractRunner:
         # 1. Limits (deterministic, fast)
         violations.extend(self._check_limits(c.limits, context, ov))
 
-        # 2. assert (typed assertions)
+        # 2. assert (typed assertions) — these are what clauses_checked tracks
         for assertion in c.assert_:
             result = self._run_assertion(assertion, context)
             if not result.passed:
@@ -142,6 +143,7 @@ class ContractRunner:
             agent=c.agent,
             contract_version=c.version,
             violations=violations,
+            clauses_checked=len(c.assert_),
             context=context,
         )
 
