@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .runner import RunResult
+from .runner import OutcomeResult, RunResult
 
 
 class AuditWriter:
@@ -22,12 +22,47 @@ class AuditWriter:
             f.write(json.dumps(entry) + "\n")
         return entry
 
+    def write_resolution(
+        self,
+        run_id: str,
+        resolved: list[OutcomeResult],
+        final_outcome: str,
+    ) -> dict:
+        """Append an outcome_resolution entry for deferred outcomes."""
+        entry: dict = {
+            "entry_type": "outcome_resolution",
+            "run_id": run_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "outcomes_resolved": [
+                {
+                    "name": o.name,
+                    "status": o.status,
+                    "predicate_type": o.predicate_type,
+                    "details": o.details,
+                }
+                for o in resolved
+            ],
+            "final_outcome": final_outcome,
+        }
+        import os
+        key = os.environ.get("AGENTCONTRACT_AUDIT_KEY", "")
+        if key:
+            import hmac
+            payload = json.dumps(entry, sort_keys=True)
+            entry["signature"] = hmac.new(
+                key.encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
+        with self.log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        return entry
+
     def _build_entry(self, result: RunResult, contract_path: str) -> dict:
         ctx = result.context
         input_text = ctx.input if ctx else ""
         output_text = ctx.output if ctx else ""
 
         entry = {
+            "entry_type": "run",
             "run_id": result.run_id,
             "agent": result.agent,
             "contract": contract_path,
@@ -49,10 +84,19 @@ class AuditWriter:
                 }
                 for v in result.violations
             ],
+            "outcome_results": [
+                {
+                    "name": o.name,
+                    "status": o.status,
+                    "accessor_type": o.accessor_type,
+                    "predicate_type": o.predicate_type,
+                    "details": o.details,
+                }
+                for o in result.outcome_results
+            ],
             "outcome": result.outcome,
         }
 
-        # HMAC signature (optional — requires AGENTCONTRACT_AUDIT_KEY env var)
         import os
         key = os.environ.get("AGENTCONTRACT_AUDIT_KEY", "")
         if key:

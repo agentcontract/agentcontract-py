@@ -10,12 +10,14 @@ from .models import (
     Contract,
     JudgeType,
     Limits,
+    Outcome,
     ViolationAction,
 )
 from .validators.base import RunContext, ValidationResult
 from .validators.cost import CostValidator
 from .validators.latency import LatencyValidator
 from .validators.llm import LLMValidator
+from .validators.outcome import OutcomeValidator
 from .validators.pattern import PatternValidator
 from .validators.schema import SchemaValidator
 
@@ -32,18 +34,33 @@ class ViolationRecord:
 
 
 @dataclass
+class OutcomeResult:
+    name: str
+    status: str  # "pass" | "failed" | "pending"
+    accessor_type: str
+    predicate_type: str
+    details: str = ""
+    accessed_value: object = None
+
+
+@dataclass
 class RunResult:
     passed: bool
     run_id: str
     agent: str
     contract_version: str
     violations: list[ViolationRecord] = field(default_factory=list)
+    outcome_results: list[OutcomeResult] = field(default_factory=list)
     clauses_checked: int = 0
     context: RunContext | None = None
 
     @property
     def outcome(self) -> str:
-        return "pass" if self.passed else "violation"
+        if not self.passed:
+            return "violation"
+        if any(o.status == "pending" for o in self.outcome_results):
+            return "pending"
+        return "pass"
 
     def blocking_violations(self) -> list[ViolationRecord]:
         return [v for v in self.violations if v.action_taken in ("block", "rollback", "halt_and_alert")]
@@ -132,6 +149,40 @@ class ContractRunner:
                     details=result.details,
                 ))
 
+        # 6. outcomes — post-run (step 7 in spec §6.1)
+        outcome_results: list[OutcomeResult] = []
+        for outcome in c.outcomes:
+            if outcome.accessor.at == "deferred":
+                outcome_results.append(OutcomeResult(
+                    name=outcome.name,
+                    status="pending",
+                    accessor_type=outcome.accessor.type.value,
+                    predicate_type=outcome.predicate.type.value,
+                    details=f"Deferred: window_ms={outcome.accessor.window_ms}",
+                ))
+                continue
+
+            status, accessed_value, details = OutcomeValidator(outcome).evaluate(context)
+            outcome_results.append(OutcomeResult(
+                name=outcome.name,
+                status=status,
+                accessor_type=outcome.accessor.type.value,
+                predicate_type=outcome.predicate.type.value,
+                details=details,
+                accessed_value=accessed_value,
+            ))
+            if status == "failed":
+                action = outcome.on_fail or ov.default
+                violations.append(ViolationRecord(
+                    clause_type="outcomes",
+                    clause_name=outcome.name,
+                    clause_text=outcome.description or outcome.name,
+                    severity=action.value,
+                    action_taken=action.value,
+                    judge="deterministic" if outcome.predicate.type.value != "llm-with-rubric" else "llm",
+                    details=details,
+                ))
+
         passed = not any(
             v.action_taken in ("block", "rollback", "halt_and_alert")
             for v in violations
@@ -143,6 +194,7 @@ class ContractRunner:
             agent=c.agent,
             contract_version=c.version,
             violations=violations,
+            outcome_results=outcome_results,
             clauses_checked=len(c.assert_),
             context=context,
         )

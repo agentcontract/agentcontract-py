@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class JudgeType(str, Enum):
@@ -98,6 +98,61 @@ class Limits(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class AccessorType(str, Enum):
+    OUTPUT_FIELD = "output_field"
+    TOOL_RESULT = "tool_result"
+    STATE = "state"
+
+
+class PredicateType(str, Enum):
+    EXACT_MATCH = "exact-match"
+    LLM_WITH_RUBRIC = "llm-with-rubric"
+    PATTERN = "pattern"
+    SCHEMA = "schema"
+
+
+class Accessor(BaseModel):
+    type: AccessorType
+    at: str = "post-run"
+    window_ms: int | None = None
+    # output_field
+    field: str | None = None
+    # tool_result
+    tool: str | None = None
+    call_index: int | None = None
+    # state
+    query: str | None = None
+    provider: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class OutcomePredicate(BaseModel):
+    type: PredicateType
+    # exact-match
+    expected: Any = None
+    # llm-with-rubric
+    rubric: str | None = None
+    judge_model: str = "fast"
+    # pattern
+    must_match: str | None = None
+    must_not_match: str | None = None
+    # schema
+    schema_: dict[str, Any] | None = Field(None, alias="schema")
+
+    model_config = {"extra": "forbid", "populate_by_name": True}
+
+
+class Outcome(BaseModel):
+    name: str
+    description: str = ""
+    accessor: Accessor
+    predicate: OutcomePredicate
+    on_fail: ViolationAction | None = None
+
+    model_config = {"extra": "forbid"}
+
+
 class OnViolation(BaseModel):
     """Violation handlers — default + per-assertion overrides."""
     default: ViolationAction = ViolationAction.BLOCK
@@ -131,6 +186,7 @@ class Contract(BaseModel):
     assert_: list[Assertion] = Field(default_factory=list, alias="assert")
     limits: Limits = Field(default_factory=Limits)
     on_violation: OnViolation = Field(default_factory=OnViolation)
+    outcomes: list[Outcome] = Field(default_factory=list)
 
     model_config = {"extra": "forbid", "populate_by_name": True}
 

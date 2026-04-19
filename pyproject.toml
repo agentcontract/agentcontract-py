@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentcontract"
-version = "0.1.5"
+version = "0.2.0"
 description = "Behavioral contracts for AI agents — Python reference implementation"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -34,12 +34,14 @@ dependencies = [
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]
 schema = ["jsonschema>=4.0"]
-all = ["anthropic>=0.40", "jsonschema>=4.0"]
+outcomes = ["jsonpath-ng>=1.6"]
+all = ["anthropic>=0.40", "jsonschema>=4.0", "jsonpath-ng>=1.6"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "anthropic>=0.40",
     "jsonschema>=4.0",
+    "jsonpath-ng>=1.6",
 ]
 
 [project.scripts]
